@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistem Terpadu PAI SD</title>
+
+<style>
+body{
+  margin:0;
+  padding:0;
+  background:#eef5ff;
+  font-family:Arial, sans-serif;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  min-height:100vh;
+  padding:10px;
+}
+.container{
+  width:100%;
+  max-width:520px;
+  background:white;
+  border-radius:12px;
+  box-shadow:0 0 12px rgba(0,0,0,0.15);
+  padding-bottom:20px;
+}
+header{
+  background:#2E8B57;
+  color:white;
+  text-align:center;
+  padding:15px;
+  font-size:1.3rem;
+  border-radius:12px 12px 0 0;
+  font-weight:bold;
+}
+.screen{display:none;padding:15px;}
+.screen.active{display:block;}
+input,select{
+  width:100%;
+  padding:10px;
+  margin:6px 0 12px;
+  border-radius:6px;
+  border:1px solid #aaa;
+  font-size:1rem;
+}
+button{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  border:none;
+  border-radius:6px;
+  font-weight:bold;
+  color:white;
+  background:#2E8B57;
+}
+button.blue{background:#3498db;}
+button.red{background:#e74c3c;}
+button.yellow{background:#f1c40f;color:black;}
+.option{
+  padding:10px;
+  border:1px solid #aaa;
+  border-radius:6px;
+  margin-top:8px;
+  cursor:pointer;
+}
+.option.selected{
+  background:#d4ffe1;
+  border:2px solid #2E8B57;
+}
+.musicBox{
+  background:#fafafa;
+  border:1px solid #ccc;
+  padding:10px;
+  border-radius:6px;
+  margin-top:10px;
+}
+.trackName{
+  font-size:0.9rem;
+  margin-bottom:6px;
+  color:#333;
+}
+.controls{
+  display:flex;
+  gap:6px;
+  margin-top:6px;
+}
+.controls button{flex:1;}
+.scrollBox{
+  max-height:350px;
+  overflow-y:auto;
+  border:1px solid #ccc;
+  padding:10px;
+  border-radius:6px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<header>SISTEM TERPADU PAI SD</header>
+<!-- ===== SCREEN LOGIN ===== -->
+<div id="screenLogin" class="screen active">
+  <input type="text" id="namaSiswa" placeholder="Nama lengkap..." autocomplete="off">
+  <select id="kelasSiswa">
+    <option value="">Pilih Kelas</option>
+    <option value="3A">3A</option>
+    <option value="3B">3B</option>
+    <option value="4A">4A</option>
+    <option value="4B">4B</option>
+  </select>
+
+  <button onclick="mulaiKuis()">Mulai Kuis</button>
+  <button class="blue" onclick="loginGuru()">Login Guru</button>
+  <button class="yellow" onclick="cekKhodam()">Cek Khodam</button>
+
+  <!-- area status kuis -->
+  <div id="statusKuis" style="margin-top:8px;font-size:0.9rem;"></div>
+  
+  <!-- ===== PLAYER AL-QUR'AN ===== -->
+  <div id="quranPlayerBox" class="musicBox" style="margin-top:12px;">
+    <b>📖 Baca Qur'an (Streaming)</b>
+    <div id="surahName" class="trackName">Belum diputar</div>
+    <div class="controls">
+      <button class="red" onclick="stopQuran()">Stop</button>
+      <button class="yellow" onclick="nextSurah()">Next</button>
+      <button onclick="startQuran()">Play</button>
+    </div>
+  </div>
+
+  <!-- ===== PLAYER MUSIK LATAR ===== -->
+  <div class="musicBox">
+    <b>🎧 Musik Latar</b>
+    <div id="musicNow" class="trackName">Memuat lagu...</div>
+    <div class="controls">
+      <button class="red" onclick="stopMusic()">Stop</button>
+      <button class="yellow" onclick="lanjutMusic()">Lanjut</button>
+      <button onclick="playMusic()">Play</button>
+    </div>
+  </div>
+</div>
+<!-- ===== SCREEN KUIS ===== -->
+<div id="screenKuis" class="screen">
+  <div id="judulKuis" style="font-weight:bold;margin-bottom:10px;"></div>
+  <div id="soalContainer"></div>
+  <button class="blue" onclick="kirimJawaban()">Kirim Jawaban</button>
+</div>
+
+<!-- ===== SCREEN HASIL ===== -->
+<div id="screenHasil" class="screen">
+  <h3>Hasil Kuis</h3>
+  <div id="nilaiAkhir" style="font-size:1.3rem;margin:10px 0;"></div>
+  <button onclick="kembaliLogin()">Kembali</button>
+</div>
+
+<script>
+// ========== BANK SOAL ==========
+let soalData = {
+  "3A": [],
+  "3B": [],
+  "4A": [],
+  "4B": []
+};
+
+// ========== RANDOM ARRAY ==========
+function shuffleArray(arr){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// ========== GLOBAL ==========
+let namaSaatIni = "";
+let kelasSaatIni = "";
+let soalTerpilih = [];
+let jawabanBenar = 0;
+
+// ========== MULAI KUIS ==========
+function mulaiKuis(){
+  let nama = document.getElementById("namaSiswa").value.trim();
+  let kelas = document.getElementById("kelasSiswa").value;
+
+  if(!nama || !kelas){
+    alert("Isi nama dan kelas!");
+    return;
+  }
+
+  // cek status kuis
+  let key = kelas+"_"+nama;
+  if(localStorage.getItem("kuis_"+key)){
+    document.getElementById("statusKuis").innerHTML = "<span style='color:red'>Kamu sudah mengerjakan kuis!</span>";
+    return;
+  }
+
+  namaSaatIni = nama;
+  kelasSaatIni = kelas;
+
+  if(soalData[kelas].length < 1){
+    alert("Soal untuk kelas "+kelas+" belum diisi!");
+    return;
+  }
+
+  // ambil 10 soal acak
+  soalTerpilih = shuffleArray([...soalData[kelas]]).slice(0, 10);
+
+  document.getElementById("judulKuis").innerText = "Kuis Kelas "+kelas;
+  tampilSoal();
+
+  tampilScreen("screenKuis");
+}
+
+// ========== TAMPILKAN SOAL ==========
+function tampilSoal(){
+  let box = document.getElementById("soalContainer");
+  box.innerHTML = "";
+
+  soalTerpilih.forEach((item, idx)=>{
+    let pilihan = shuffleArray([...item.pilihan]);
+    let html = `<div style='margin-bottom:12px;'>
+      <b>${idx+1}. ${item.soal}</b>`;
+
+    pilihan.forEach(p=>{
+      html += `<div class='option' onclick='pilihOption(this, ${idx}, "${p}")'>${p}</div>`;
+    });
+
+    html += `</div>`;
+    box.innerHTML += html;
+  });
+}
+
+// ========== PILIH JAWABAN ==========
+let jawabanUser = {};
+
+function pilihOption(el, no, val){
+  jawabanUser[no] = val;
+  let parent = el.parentElement;
+  [...parent.querySelectorAll(".option")].forEach(o=>o.classList.remove("selected"));
+  el.classList.add("selected");
+}
+
+// ========== KIRIM JAWABAN ==========
+function kirimJawaban(){
+  if(Object.keys(jawabanUser).length < soalTerpilih.length){
+    alert("Masih ada soal yang belum dijawab!");
+    return;
+  }
+
+  jawabanBenar = 0;
+  soalTerpilih.forEach((s,i)=>{
+    if(jawabanUser[i] === s.jawaban) jawabanBenar++;
+  });
+
+  // simpan status kuis
+  let key = kelasSaatIni+"_"+namaSaatIni;
+  localStorage.setItem("kuis_"+key, "selesai");
+
+  // simpan absen hadir otomatis
+  simpanHadir(namaSaatIni, kelasSaatIni);
+
+  // tampil hasil
+  document.getElementById("nilaiAkhir").innerText = 
+    "Benar: "+jawabanBenar+" dari "+soalTerpilih.length;
+
+  tampilScreen("screenHasil");
+}
+
+function kembaliLogin(){
+  tampilScreen("screenLogin");
+}
+</script>
+<!-- ===== SCREEN LOGIN GURU ===== -->
+<div id="screenGuruLogin" class="screen">
+  <input type="password" id="passGuru" placeholder="Password Guru...">
+  <button onclick="submitGuru()">Masuk</button>
+  <button class="blue" onclick="tampilScreen('screenLogin')">Kembali</button>
+  <div id="errorGuru" style="color:red;margin-top:6px;"></div>
+</div>
+
+<!-- ===== SCREEN MENU GURU ===== -->
+<div id="screenGuruMenu" class="screen">
+  <h3 style="text-align:center;">MENU GURU</h3>
+  <button onclick="bukaInputNama()">Input Nama Siswa</button>
+  <button onclick="bukaAbsensi()">Absensi Harian</button>
+  <button onclick="bukaRekapAbsensi()">Rekap Absensi</button>
+  <button onclick="bukaRekapNilai()">Rekap Nilai</button>
+  <button class="red" onclick="resetSemua()">Reset Data</button>
+  <button onclick="tampilScreen('screenLogin')">Logout</button>
+</div>
+
+<!-- ===== SCREEN INPUT NAMA ===== -->
+<div id="screenInputNama" class="screen">
+  <input type="text" id="namaBaru" placeholder="Nama siswa...">
+  <select id="kelasBaru">
+    <option value="">Pilih Kelas</option>
+    <option value="3A">3A</option>
+    <option value="3B">3B</option>
+    <option value="4A">4A</option>
+    <option value="4B">4B</option>
+  </select>
+  <button onclick="simpanNamaBaru()">Simpan</button>
+  <button class="blue" onclick="tampilScreen('screenGuruMenu')">Kembali</button>
+
+  <div id="listNama" class="scrollBox" style="margin-top:10px;font-size:0.9rem;"></div>
+</div>
+
+<!-- ===== SCREEN ABSENSI ===== -->
+<div id="screenAbsensi" class="screen">
+  <h3 style="text-align:center;">Absensi Hari <span id="hariKe"></span></h3>
+  <div id="absenList" class="scrollBox"></div>
+  <button onclick="hariBerikutnya()">Hari Berikutnya</button>
+  <button class="blue" onclick="tampilScreen('screenGuruMenu')">Kembali</button>
+</div>
+
+<!-- ===== SCREEN REKAP ABSENSI ===== -->
+<div id="screenRekapAbsensi" class="screen">
+  <h3 style="text-align:center;">Rekap Absensi</h3>
+  <div id="rekapAbsensiList" class="scrollBox"></div>
+  <button class="blue" onclick="tampilScreen('screenGuruMenu')">Kembali</button>
+</div>
+
+<!-- ===== SCREEN REKAP NILAI ===== -->
+<div id="screenRekapNilai" class="screen">
+  <h3 style="text-align:center;">Rekap Nilai</h3>
+  <div id="rekapNilaiList" class="scrollBox"></div>
+  <button class="blue" onclick="tampilScreen('screenGuruMenu')">Kembali</button>
+</div>
+
+<script>
+// =========================
+// DATA LOCAL STORAGE
+// =========================
+let dataSiswa = JSON.parse(localStorage.getItem("dataSiswa") || '{"3A":[],"3B":[],"4A":[],"4B":[]}');
+let dataNilai = JSON.parse(localStorage.getItem("dataNilai") || "{}");
+let dataAbsen = JSON.parse(localStorage.getItem("dataAbsen") || "{}");
+let hari = parseInt(localStorage.getItem("hari")) || 1;
+
+document.getElementById("hariKe").innerText = hari;
+
+// =========================
+// LOGIN GURU
+// =========================
+function loginGuru(){
+  tampilScreen('screenGuruLogin');
+}
+
+function submitGuru(){
+  let p = document.getElementById("passGuru").value.trim();
+  if(p !== "040698"){
+    document.getElementById("errorGuru").innerText = "Password salah!";
+    return;
+  }
+  document.getElementById("errorGuru").innerText = "";
+  tampilScreen('screenGuruMenu');
+}
+
+// =========================
+// INPUT NAMA SISWA
+// =========================
+function bukaInputNama(){
+  tampilListNama();
+  tampilScreen('screenInputNama');
+}
+
+function simpanNamaBaru(){
+  let nama = document.getElementById("namaBaru").value.trim();
+  let kls  = document.getElementById("kelasBaru").value;
+
+  if(!nama || !kls){ alert("Lengkapi data!"); return; }
+
+  if(!dataSiswa[kls].includes(nama)) dataSiswa[kls].push(nama);
+  if(!dataAbsen[kls]) dataAbsen[kls]={};
+  if(!dataAbsen[kls][nama]) dataAbsen[kls][nama]=new Array(30).fill("");
+
+  simpanData();
+  tampilListNama();
+  document.getElementById("namaBaru").value="";
+  document.getElementById("kelasBaru").value="";
+}
+
+function tampilListNama(){
+  let box = document.getElementById("listNama");
+  box.innerHTML="";
+
+  Object.keys(dataSiswa).forEach(k=>{
+    box.innerHTML += `<b>${k}</b><br>`;
+    dataSiswa[k].forEach(n=>{ box.innerHTML += `• ${n}<br>`; });
+    box.innerHTML+="<br>";
+  });
+}
+
+// =========================
+// SIMPAN DATA
+// =========================
+function simpanData(){
+  localStorage.setItem("dataSiswa", JSON.stringify(dataSiswa));
+  localStorage.setItem("dataNilai", JSON.stringify(dataNilai));
+  localStorage.setItem("dataAbsen", JSON.stringify(dataAbsen));
+  localStorage.setItem("hari", hari);
+}
+
+// =========================
+// ABSENSI
+// =========================
+function bukaAbsensi(){
+  tampilAbsensi();
+  tampilScreen('screenAbsensi');
+}
+
+function tampilAbsensi(){
+  let box = document.getElementById("absenList");
+  box.innerHTML="";
+
+  Object.keys(dataSiswa).forEach(k=>{
+    box.innerHTML+=`<h4>${k}</h4>`;
+    dataSiswa[k].forEach(n=>{
+      let st = dataAbsen[k][n][hari-1] || "-";
+      box.innerHTML += `
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span>${n}</span>
+          <div>
+            <button onclick="setAbsen('${k}','${n}','H')" style="padding:3px;background:#2ecc71;">H</button>
+            <button onclick="setAbsen('${k}','${n}','I')" style="padding:3px;background:#f1c40f;">I</button>
+            <button onclick="setAbsen('${k}','${n}','S')" style="padding:3px;background:#3498db;">S</button>
+            <button onclick="setAbsen('${k}','${n}','A')" style="padding:3px;background:#e74c3c;">A</button>
+          </div>
+          <span>${st}</span>
+        </div>`;
+    });
+  });
+}
+
+function setAbsen(k,n,s){
+  dataAbsen[k][n][hari-1]=s;
+  simpanData();
+  bukaAbsensi();
+}
+
+function hariBerikutnya(){
+  if(hari<30){
+    hari++;
+    simpanData();
+    bukaAbsensi();
+  } else alert("Sudah maksimal 30 hari");
+}
+
+// =========================
+// REKAP ABSENSI
+// =========================
+function bukaRekapAbsensi(){
+  let box = document.getElementById("rekapAbsensiList");
+  box.innerHTML="";
+
+  Object.keys(dataSiswa).forEach(k=>{
+    box.innerHTML+=`<h4>${k}</h4><table border='1' cellpadding='3'><tr><th>Nama</th>`;
+    for(let i=1;i<=30;i++) box.innerHTML+=`<th>${i}</th>`;
+    box.innerHTML+=`</tr>`;
+
+    dataSiswa[k].forEach(n=>{
+      box.innerHTML+=`<tr><td>${n}</td>`;
+      dataAbsen[k][n].forEach(v=>{
+        box.innerHTML+=`<td>${v || "-"}</td>`;
+      });
+      box.innerHTML+=`</tr>`;
+    });
+
+    box.innerHTML+=`</table><br>`;
+  });
+
+  tampilScreen('screenRekapAbsensi');
+}
+
+// =========================
+// RESET DATA
+// =========================
+function resetSemua(){
+  if(confirm("Reset semua data?")){
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+// =========================
+// TAMPIL SCREEN
+// =========================
+function tampilScreen(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+</script>
+<script>
+// =========================
+// SIMPAN NILAI + ABSENSI OTOMATIS
+// =========================
+
+// dipanggil dari PART 3 ketika selesai kirim jawaban
+function simpanHadir(nama, kelas){
+  if(!dataAbsen[kelas]) dataAbsen[kelas]={};
+  if(!dataAbsen[kelas][nama]) dataAbsen[kelas][nama]=new Array(30).fill("");
+  dataAbsen[kelas][nama][hari-1] = "H";
+  simpanData();
+}
+
+// ambil nilai ke array dataNilai
+if(!dataNilai || typeof dataNilai !== "object") dataNilai={};
+
+function simpanNilai(nama, kelas, skor){
+  if(!dataNilai[kelas]) dataNilai[kelas]=[];
+  dataNilai[kelas].push({
+    nama: nama,
+    skor: skor,
+    waktu: new Date().toLocaleString("id-ID")
+  });
+  simpanData();
+}
+
+// =========================
+// DIPANGGIL SAAT KIRIM JAWABAN (override dari PART 3)
+// =========================
+const _kirimJawabanAsli = kirimJawaban; // backup aslinya
+
+kirimJawaban = function(){
+  // hitung dulu dari original function
+  if(Object.keys(jawabanUser).length < soalTerpilih.length){
+    alert("Masih ada soal yang belum dijawab!");
+    return;
+  }
+
+  jawabanBenar = 0;
+  soalTerpilih.forEach((s,i)=>{
+    if(jawabanUser[i] === s.jawaban) jawabanBenar++;
+  });
+
+  // simpan status kuis lokal
+  let key = kelasSaatIni+"_"+namaSaatIni;
+  localStorage.setItem("kuis_"+key, "done");
+
+  // simpan nilai
+  simpanNilai(namaSaatIni, kelasSaatIni, jawabanBenar);
+
+  // absensi otomatis hadir
+  simpanHadir(namaSaatIni, kelasSaatIni);
+
+  // tampil hasil
+  document.getElementById("nilaiAkhir").innerText = 
+    "Benar: "+jawabanBenar+" dari "+soalTerpilih.length;
+
+  tampilScreen("screenHasil");
+}
+
+// =========================
+// REKAP NILAI
+// =========================
+function bukaRekapNilai(){
+  let box = document.getElementById("rekapNilaiList");
+  box.innerHTML="";
+
+  Object.keys(dataNilai).forEach(k=>{
+    box.innerHTML+=`<h4>${k}</h4>`;
+    box.innerHTML+=`<table border="1" cellpadding="4">
+      <tr>
+        <th>Nama</th><th>Nilai</th><th>Waktu</th>
+      </tr>`;
+
+    dataNilai[k].forEach(d=>{
+      box.innerHTML+=`<tr>
+        <td>${d.nama}</td>
+        <td>${d.skor}</td>
+        <td>${d.waktu}</td>
+      </tr>`;
+    });
+
+    box.innerHTML+="</table><br>";
+  });
+
+  tampilScreen('screenRekapNilai');
+}
+
+// =========================
+// UPDATE STATUS KUIS DI LOGIN
+// =========================
+function updateStatusKuis(){
+  let nama = document.getElementById("namaSiswa").value.trim();
+  let kelas = document.getElementById("kelasSiswa").value;
+  let out = document.getElementById("statusKuis");
+
+  if(!nama || !kelas){
+    out.innerHTML = "";
+    return;
+  }
+
+  let key = kelas+"_"+nama;
+  if(localStorage.getItem("kuis_"+key)){
+    out.innerHTML = "<span style='color:red'>Kamu sudah mengerjakan kuis!</span>";
+  } else {
+    out.innerHTML = "<span style='color:green'>Belum mengerjakan</span>";
+  }
+}
+
+// event realtime
+document.getElementById("namaSiswa").addEventListener("input",updateStatusKuis);
+document.getElementById("kelasSiswa").addEventListener("change",updateStatusKuis);
+
+</script>
+<script>
+// =========================
+// BANK SOAL (FORMAT BENAR)
+// =========================
+
+// ===== SOAL KELAS 3A =====
+soalData["3A"] = [
+  {soal:"Puasa Ramadhan hukumnya bagi umat Islam adalah?", pilihan:["Wajib","Sunnah","Makruh","Haram"], jawaban:"Wajib"},
+  {soal:"Berbuka puasa dilakukan pada waktu?", pilihan:["Maghrib","Subuh","Isya","Dzuhur"], jawaban:"Maghrib"},
+  {soal:"Sahur dilakukan pada waktu?", pilihan:["Sebelum Subuh","Sesudah Maghrib","Sesudah Isya","Siang hari"], jawaban:"Sebelum Subuh"},
+  {soal:"Zakat fitrah dibayarkan sebelum?", pilihan:["Sholat Idul Fitri","Sholat Jumat","Sholat Tahajud","Sholat Dhuha"], jawaban:"Sholat Idul Fitri"},
+  {soal:"Sholat sunnah di malam Ramadhan adalah?", pilihan:["Tarawih","Dhuha","Istikharah","Tahiyatul Masjid"], jawaban:"Tarawih"},
+  {soal:"Lailatul Qadar terjadi pada 10 malam terakhir bulan?", pilihan:["Ramadhan","Syawal","Rajab","Muharram"], jawaban:"Ramadhan"},
+  {soal:"Orang yang sakit dan tidak puasa wajib?", pilihan:["Mengganti di hari lain","Tidak perlu ganti puasa","Puasa setengah hari","Puasa sambil tidur"], jawaban:"Mengganti di hari lain"},
+  {soal:"Berbuka puasa disunnahkan dengan?", pilihan:["Kurma","Kue","Buah Pir","Air Dingin"], jawaban:"Kurma"},
+  {soal:"Puasa melatih kita menjadi pribadi yang?", pilihan:["Sabar","Pemarah","Iri","Sombong"], jawaban:"Sabar"},
+  {soal:"Sholat tarawih dilakukan setelah sholat?", pilihan:["Isya","Subuh","Ashar","Dzuhur"], jawaban:"Isya"}
+];
+
+// ===== SOAL KELAS 3B =====
+soalData["3B"] = soalData["3A"]; // sama saja (boleh edit nanti)
+
+// ===== SOAL KELAS 4A =====
+soalData["4A"] = [
+  {soal:"Baligh adalah keadaan dimana anak sudah?", pilihan:["Dikenai hukum syariat","Tidak wajib sholat","Tidak perlu puasa","Boleh mencuri"], jawaban:"Dikenai hukum syariat"},
+  {soal:"Tanda baligh pada laki-laki adalah?", pilihan:["Mimpi basah","Haidh","Sakit perut","Meriang"], jawaban:"Mimpi basah"},
+  {soal:"Tanda baligh pada perempuan adalah?", pilihan:["Haidh","Mimpi basah","Tumbuh kumis","Perut membesar"], jawaban:"Haidh"},
+  {soal:"Setelah mimpi basah laki-laki wajib?", pilihan:["Mandi wajib","Wudhu saja","Tidur","Minum"], jawaban:"Mandi wajib"},
+  {soal:"Setelah haidh perempuan wajib?", pilihan:["Mandi wajib","Wudhu saja","Cuci muka","Tidur"], jawaban:"Mandi wajib"},
+  {soal:"Pubertas adalah masa perubahan dari?", pilihan:["Anak ke dewasa","Dewasa ke tua","Bayar ke balita","Tua ke muda"], jawaban:"Anak ke dewasa"},
+  {soal:"Haidh terjadi pada organ bagian?", pilihan:["Rahim","Jantung","Paru-paru","Hati"], jawaban:"Rahim"},
+  {soal:"Mukallaf berarti orang yang sudah?", pilihan:["Terikat hukum agama","Tidak wajib puasa","Tidak wajib sholat","Tidak punya kewajiban"], jawaban:"Terikat hukum agama"},
+  {soal:"Junub disebabkan oleh keluarnya?", pilihan:["Mani","Keringat","Air liur","Air mata"], jawaban:"Mani"},
+  {soal:"Menghilangkan hadats besar dilakukan dengan?", pilihan:["Mandi wajib","Wudhu","Tayamum","Cuci muka"], jawaban:"Mandi wajib"}
+];
+
+// ===== SOAL KELAS 4B =====
+soalData["4B"] = soalData["4A"]; // sama dulu
+</script>
+<script>
+// ==========================
+// STREAMING QUR'AN 114 SURAH
+// ==========================
+let surahIndex = 1;
+let quranAudio = new Audio();
+quranAudio.crossOrigin = "anonymous";
+
+const surahNames = [
+"", "Al-Fatihah","Al-Baqarah","Ali Imran","An-Nisa","Al-Maidah","Al-An'am","Al-A'raf","Al-Anfal","At-Taubah","Yunus",
+"Hud","Yusuf","Ar-Ra'd","Ibrahim","Al-Hijr","An-Nahl","Al-Isra","Al-Kahf","Maryam","Ta-Ha",
+"Al-Anbiya","Al-Hajj","Al-Mu'minun","An-Nur","Al-Furqan","Ash-Shu'ara","An-Naml","Al-Qasas","Al-Ankabut","Ar-Rum",
+"Luqman","As-Sajdah","Al-Ahzab","Saba","Fatir","Ya-Sin","As-Saffat","Sad","Az-Zumar","Ghafir",
+"Fussilat","Ash-Shura","Az-Zukhruf","Ad-Dukhan","Al-Jathiyah","Al-Ahqaf","Muhammad","Al-Fath","Al-Hujurat","Qaf",
+"Adh-Dhariyat","At-Tur","An-Najm","Al-Qamar","Ar-Rahman","Al-Waqi'ah","Al-Hadid","Al-Mujadilah","Al-Hashr","Al-Mumtahanah",
+"As-Saff","Al-Jumu'ah","Al-Munafiqun","At-Taghabun","At-Talaq","At-Tahrim","Al-Mulk","Al-Qalam","Al-Haqqah","Al-Ma'arij",
+"Nuh","Al-Jinn","Al-Muzzammil","Al-Muddathir","Al-Qiyamah","Al-Insan","Al-Mursalat","An-Naba","An-Nazi'at","Abasa",
+"At-Takwir","Al-Infitar","Al-Mutaffifin","Al-Inshiqaq","Al-Buruj","At-Tariq","Al-A'la","Al-Ghashiyah","Al-Fajr","Al-Balad",
+"Ash-Shams","Al-Layl","Ad-Duha","Ash-Sharh","At-Tin","Al-Alaq","Al-Qadr","Al-Bayyinah","Az-Zalzalah","Al-Adiyat",
+"Al-Qari'ah","At-Takathur","Al-Asr","Al-Humazah","Al-Fil","Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr",
+"Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas"
+];
+
+function startQuran(){
+  playSurah(surahIndex);
+}
+
+function playSurah(i){
+  surahIndex = i;
+  quranAudio.src = `https://download.quranicaudio.com/quran/abdul_baset/murattal/${String(i).padStart(3,'0')}.mp3`;
+  quranAudio.play().catch(()=>{});
+  document.getElementById("surahName").innerText = `Surah: ${surahNames[i]} (${i}/114)`;
+}
+
+function nextSurah(){
+  surahIndex++;
+  if(surahIndex > 114) surahIndex = 1;
+  playSurah(surahIndex);
+}
+
+function stopQuran(){
+  quranAudio.pause();
+  document.getElementById("surahName").innerText = "Dihentikan";
+}
+
+quranAudio.addEventListener("ended",()=>nextSurah());
+
+// ==========================
+// MUSIK LATAR ala.mp3
+// ==========================
+let musicAudio = new Audio("./ala.mp3");
+let musicStarted = false;
+
+// Start musik
+function playMusic(){
+  if(!musicStarted){
+    musicStarted = true;
+  }
+  musicAudio.play().catch(()=>{});
+  document.getElementById("musicNow").innerText = "Memutar: ala.mp3";
+}
+
+// stop musik
+function stopMusic(){
+  musicAudio.pause();
+  document.getElementById("musicNow").innerText = "Dihentikan";
+}
+
+// lanjut == replay
+function lanjutMusic(){
+  musicAudio.currentTime = 0;
+  musicAudio.play();
+  document.getElementById("musicNow").innerText = "Memutar: ala.mp3";
+}
+
+// unlock audio untuk mobile
+document.addEventListener("click", ()=>{
+  if(!musicStarted){
+    musicStarted = true;
+    musicAudio.play().catch(()=>{});
+    document.getElementById("musicNow").innerText = "Memutar: ala.mp3";
+  }
+},{once:true});
+</script>
+<!-- ===== SCREEN KHODAM ===== -->
+<div id="screenKhodam" class="screen">
+  <h3 style="text-align:center;">Cek Khodam (Hiburan)</h3>
+  <input type="text" id="namaKhodam" placeholder="Masukkan nama..." autocomplete="off">
+  <button class="yellow" onclick="hasilKhodam()">Cek Khodam</button>
+  <div id="hasilKhodam" style="margin-top:10px;font-size:1.1rem;"></div>
+  <button class="blue" onclick="tampilScreen('screenLogin')">Kembali</button>
+</div>
+
+<script>
+// ==========================
+// CEK KHODAM (HIBURAN)
+// ==========================
+const daftarKhodam = [
+  "Maung Hitam","Maung Putih","Singa Emas",
+  "Aura Putih","Aura Hitam","Oncom Legendaris",
+  "Tempe Sakti","Soleh","Solehah","Cacing Baja",
+  "Jomblo Hebat","Rajin Ibadah","Pemburu Lailatul Qadar"
+];
+
+function cekKhodam(){
+  tampilScreen("screenKhodam");
+}
+
+function hasilKhodam(){
+  let n = document.getElementById("namaKhodam").value.trim();
+  if(!n){ alert("Masukkan nama dulu!"); return; }
+  let acak = daftarKhodam[Math.floor(Math.random()*daftarKhodam.length)];
+  document.getElementById("hasilKhodam").innerHTML = `
+    <b>${n}</b><br>Khodam: <span style="color:#2E8B57">${acak}</span><br><i>(Hiburan)</i>
+  `;
+  // TTS
+  let u = new SpeechSynthesisUtterance(`${n} memiliki khodam ${acak}`);
+  u.lang="id-ID"; speechSynthesis.speak(u);
+}
+</script>
+
+<script>
+// ==========================
+// RESET SEMUA DATA
+// ==========================
+function resetSemua(){
+  if(confirm("Reset SEMUA data?")){
+    localStorage.clear();
+    location.reload();
+  }
+}
+</script>
+
+</div> <!-- end container -->
+</body>
+</html>
